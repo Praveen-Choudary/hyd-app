@@ -1,29 +1,8 @@
 
-// =====================================================================
-// Lakh Bazaar - Production Jenkins Pipeline
-// Docker Hub + E2E Networks Kubernetes
-//
-// Docker Hub Username: praveen22233
-//
-// Jenkins credentials required:
-//   e2e-kubeconfig : Secret file
-//   registry-creds : Username with password
-//
-// Agent tools required:
-//   docker, kubectl, envsubst, git, node
-//
-// Optional:
-//   Slack Notification plugin
-// =====================================================================
-
 def notify(String color, String msg) {
     if (params.SLACK_CHANNEL?.trim()) {
         try {
-            slackSend(
-                channel: params.SLACK_CHANNEL,
-                color: color,
-                message: msg
-            )
+            slackSend(channel: params.SLACK_CHANNEL, color: color, message: msg)
         } catch (e) {
             echo "Slack notification skipped: ${e.message}"
         }
@@ -37,15 +16,9 @@ pipeline {
         timestamps()
         disableConcurrentBuilds()
         timeout(time: 60, unit: 'MINUTES')
-        buildDiscarder(
-            logRotator(
-                numToKeepStr: '30',
-                artifactNumToKeepStr: '10'
-            )
-        )
+        buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '10'))
     }
 
-    // Git polling
     triggers {
         pollSCM('H/5 * * * *')
     }
@@ -54,7 +27,7 @@ pipeline {
         choice(
             name: 'ACTION',
             choices: ['DEPLOY', 'ROLLBACK', 'RESTART', 'SCALE', 'STATUS', 'DESTROY'],
-            description: 'DEPLOY builds, scans, pushes and deploys.'
+            description: 'Select pipeline action'
         )
 
         string(
@@ -66,13 +39,13 @@ pipeline {
         string(
             name: 'ALLOWED_BRANCH',
             defaultValue: 'main',
-            description: 'Production deployment branch'
+            description: 'Allowed production branch'
         )
 
         booleanParam(
             name: 'REQUIRE_APPROVAL',
             defaultValue: true,
-            description: 'Manual approval before production deployment'
+            description: 'Require manual approval before production deployment'
         )
 
         string(
@@ -84,7 +57,7 @@ pipeline {
         choice(
             name: 'SCAN_SEVERITY',
             choices: ['CRITICAL', 'HIGH,CRITICAL'],
-            description: 'Trivy vulnerability scan severity'
+            description: 'Trivy scan severity'
         )
 
         booleanParam(
@@ -127,10 +100,6 @@ pipeline {
 
     stages {
 
-        // =============================================================
-        // PRE-FLIGHT
-        // =============================================================
-
         stage('Preflight') {
             steps {
                 script {
@@ -145,35 +114,27 @@ pipeline {
                         "#${env.BUILD_NUMBER} ${params.ACTION} ${env.TAG}"
 
                     if (params.ACTION == 'DEPLOY') {
-
-                        if (params.REGISTRY.contains('YOUR_USER')) {
-                            error('Set your Docker Hub repository correctly.')
+                        if (!(params.REGISTRY ==~ /docker\.io\/[a-z0-9]+(?:[._-][a-z0-9]+)*\/[a-z0-9]+(?:[._-][a-z0-9]+)*/)) {
+                            error("Invalid Docker Hub repository: ${params.REGISTRY}")
                         }
 
                         def branch = (env.GIT_BRANCH ?: '')
                             .replaceFirst('^origin/', '')
 
                         if (branch != params.ALLOWED_BRANCH) {
-                            error(
-                                "Production deploys are only allowed from " +
-                                "'${params.ALLOWED_BRANCH}' (current: '${branch}')."
-                            )
+                            error("Deployment allowed only from ${params.ALLOWED_BRANCH}. Current: ${branch}")
                         }
                     }
 
                     if (params.ACTION == 'SCALE') {
-                        if (
-                            !(params.FRONTEND_REPLICAS ==~ /\d+/) ||
-                            !(params.CATALOG_MIN_REPLICAS ==~ /\d+/)
-                        ) {
+                        if (!(params.FRONTEND_REPLICAS ==~ /\d+/) ||
+                            !(params.CATALOG_MIN_REPLICAS ==~ /\d+/)) {
                             error('Replica values must be whole numbers.')
                         }
                     }
 
-                    if (
-                        params.ACTION == 'DESTROY' &&
-                        params.DESTROY_CONFIRM != env.NS
-                    ) {
+                    if (params.ACTION == 'DESTROY' &&
+                        params.DESTROY_CONFIRM != env.NS) {
                         error("Type '${env.NS}' in DESTROY_CONFIRM to delete.")
                     }
                 }
@@ -183,30 +144,21 @@ pipeline {
 
                     for t in docker kubectl envsubst git; do
                         command -v $t >/dev/null || {
-                            echo "Missing tool on agent: $t"
+                            echo "Missing tool: $t"
                             exit 1
                         }
                     done
 
                     kubectl cluster-info | head -1
-
-                    echo "Cluster permissions:"
                     kubectl auth can-i create deployments -n $NS || true
                 '''
             }
         }
 
-        // =============================================================
-        // STATIC CHECKS
-        // =============================================================
-
         stage('Static Checks') {
             when {
-                expression {
-                    params.ACTION == 'DEPLOY'
-                }
+                expression { params.ACTION == 'DEPLOY' }
             }
-
             steps {
                 sh '''
                     set -eu
@@ -221,59 +173,39 @@ pipeline {
             }
         }
 
-        // =============================================================
-        // BUILD DOCKER IMAGES
-        // =============================================================
-
         stage('Build Images') {
             when {
-                expression {
-                    params.ACTION == 'DEPLOY'
-                }
+                expression { params.ACTION == 'DEPLOY' }
             }
-
             steps {
                 sh '''
                     set -eu
 
                     for s in $SERVICES; do
-
-                        echo "Building Docker image: $s"
+                        echo "Building $s"
 
                         docker build --pull --platform linux/amd64 \
                             --label org.opencontainers.image.revision=$GIT_SHA \
                             --label org.opencontainers.image.source="$GIT_URL" \
                             --label ci.build.url="$BUILD_URL" \
                             -t $REGISTRY/$s:$TAG ./$s
-
                     done
                 '''
             }
         }
 
-        // =============================================================
-        // TRIVY VULNERABILITY SCANNING
-        // =============================================================
-
         stage('Vulnerability Scan') {
             when {
                 allOf {
-                    expression {
-                        params.ACTION == 'DEPLOY'
-                    }
-
-                    expression {
-                        !params.SKIP_SCAN
-                    }
+                    expression { params.ACTION == 'DEPLOY' }
+                    expression { !params.SKIP_SCAN }
                 }
             }
-
             steps {
                 sh '''
                     set -eu
 
                     for s in $SERVICES; do
-
                         echo "Scanning $s"
 
                         docker run --rm \
@@ -285,23 +217,15 @@ pipeline {
                             --severity "$SCAN_SEVERITY" \
                             --ignore-unfixed \
                             $REGISTRY/$s:$TAG
-
                     done
                 '''
             }
         }
 
-        // =============================================================
-        // PUSH IMAGES TO DOCKER HUB
-        // =============================================================
-
         stage('Push Images') {
             when {
-                expression {
-                    params.ACTION == 'DEPLOY'
-                }
+                expression { params.ACTION == 'DEPLOY' }
             }
-
             steps {
                 withCredentials([
                     usernamePassword(
@@ -310,22 +234,16 @@ pipeline {
                         passwordVariable: 'REG_PASS'
                     )
                 ]) {
-
                     retry(3) {
                         sh '''
                             set -eu
 
-                            echo "$REG_PASS" | docker login \
-                                "${REGISTRY%%/*}" \
-                                -u "$REG_USER" \
-                                --password-stdin
+                            echo "$REG_PASS" | docker login docker.io \
+                                -u "$REG_USER" --password-stdin
 
                             for s in $SERVICES; do
-
-                                echo "Pushing $s image to Docker Hub"
-
+                                echo "Pushing $s to Docker Hub"
                                 docker push $REGISTRY/$s:$TAG
-
                             done
                         '''
                     }
@@ -333,29 +251,17 @@ pipeline {
             }
         }
 
-        // =============================================================
-        // MANUAL APPROVAL
-        // =============================================================
-
         stage('Approval') {
             when {
                 allOf {
-                    expression {
-                        params.ACTION == 'DEPLOY'
-                    }
-
-                    expression {
-                        params.REQUIRE_APPROVAL
-                    }
+                    expression { params.ACTION == 'DEPLOY' }
+                    expression { params.REQUIRE_APPROVAL }
                 }
             }
-
             steps {
                 script {
-                    notify(
-                        'warning',
-                        "Approval needed: deploy ${env.TAG} to production. ${env.BUILD_URL}"
-                    )
+                    notify('warning',
+                        "Approval needed: deploy ${env.TAG}. ${env.BUILD_URL}")
 
                     timeout(time: 30, unit: 'MINUTES') {
                         input(
@@ -368,17 +274,10 @@ pipeline {
             }
         }
 
-        // =============================================================
-        // DEPLOY TO KUBERNETES
-        // =============================================================
-
         stage('Deploy') {
             when {
-                expression {
-                    params.ACTION == 'DEPLOY'
-                }
+                expression { params.ACTION == 'DEPLOY' }
             }
-
             steps {
                 script {
                     env.DEPLOY_STARTED = 'true'
@@ -391,63 +290,46 @@ pipeline {
                         passwordVariable: 'REG_PASS'
                     )
                 ]) {
-
                     sh '''
                         set -eu
 
-                        # Create namespace
                         kubectl create namespace $NS \
                             --dry-run=client -o yaml | kubectl apply -f -
 
-                        # Create Docker registry secret
                         kubectl -n $NS create secret docker-registry regcred \
-                            --docker-server="${REGISTRY%%/*}" \
+                            --docker-server=docker.io \
                             --docker-username="$REG_USER" \
                             --docker-password="$REG_PASS" \
                             --dry-run=client -o yaml | kubectl apply -f -
 
-                        # Audit trail
                         mkdir -p audit
 
                         kubectl -n $NS get deploy,svc,hpa -o yaml \
                             > audit/before-$TAG.yaml 2>/dev/null || true
 
-                        # Render Kubernetes manifests
                         envsubst '${REGISTRY} ${TAG}' \
                             < k8s-e2e/app.yaml \
                             > audit/rendered-$TAG.yaml
 
-                        # Kubernetes diff
                         kubectl diff -f audit/rendered-$TAG.yaml \
                             > audit/diff-$TAG.patch || true
 
-                        # Apply manifests
                         kubectl apply -f audit/rendered-$TAG.yaml
 
-                        # Annotate deployments
                         for d in $SERVICES; do
-
                             kubectl -n $NS annotate deploy/$d \
                                 kubernetes.io/change-cause="Jenkins #$BUILD_NUMBER $TAG" \
                                 --overwrite
-
                         done
 
-                        # Wait for rollout
                         for d in $SERVICES; do
-
                             kubectl -n $NS rollout status deploy/$d \
                                 --timeout=300s
-
                         done
                     '''
                 }
             }
         }
-
-        // =============================================================
-        // SMOKE TEST
-        // =============================================================
 
         stage('Smoke Test') {
             when {
@@ -455,7 +337,6 @@ pipeline {
                     params.ACTION in ['DEPLOY', 'RESTART', 'ROLLBACK']
                 }
             }
-
             steps {
                 retry(3) {
                     sh '''
@@ -464,17 +345,13 @@ pipeline {
                         run() {
                             kubectl -n $NS run \
                                 "smoke-$BUILD_NUMBER-$RANDOM" \
-                                --rm -i \
-                                --restart=Never \
-                                --quiet \
+                                --rm -i --restart=Never --quiet \
                                 --image=curlimages/curl:8.10.1 \
                                 -- "$@" 2>/dev/null
                         }
 
-                        # Catalog API test
                         run curl -sf --max-time 10 \
-                            http://frontend/api/catalog/products \
-                            > products.json
+                            http://frontend/api/catalog/products > products.json
 
                         COUNT=$(grep -o '"id":' products.json | wc -l)
 
@@ -483,32 +360,22 @@ pipeline {
                             exit 1
                         }
 
-                        # Orders API test
                         run curl -sf --max-time 10 \
-                            http://frontend/api/orders/stores \
-                            | grep -q 'Banjara Hills'
+                            http://frontend/api/orders/stores | grep -q 'Banjara Hills'
 
-                        # Frontend test
                         run curl -sf --max-time 10 \
                             -o /dev/null http://frontend/
 
-                        echo "Smoke test passed: $COUNT products"
+                        echo "Smoke tests passed"
                     '''
                 }
             }
         }
 
-        // =============================================================
-        // ROLLBACK
-        // =============================================================
-
         stage('Rollback') {
             when {
-                expression {
-                    params.ACTION == 'ROLLBACK'
-                }
+                expression { params.ACTION == 'ROLLBACK' }
             }
-
             steps {
                 sh '''
                     set -eu
@@ -518,24 +385,16 @@ pipeline {
                     done
 
                     for d in $SERVICES; do
-                        kubectl -n $NS rollout status deploy/$d \
-                            --timeout=300s
+                        kubectl -n $NS rollout status deploy/$d --timeout=300s
                     done
                 '''
             }
         }
 
-        // =============================================================
-        // RESTART
-        // =============================================================
-
         stage('Restart') {
             when {
-                expression {
-                    params.ACTION == 'RESTART'
-                }
+                expression { params.ACTION == 'RESTART' }
             }
-
             steps {
                 sh '''
                     set -eu
@@ -544,24 +403,16 @@ pipeline {
                         deploy/catalog deploy/orders deploy/frontend
 
                     for d in $SERVICES; do
-                        kubectl -n $NS rollout status deploy/$d \
-                            --timeout=300s
+                        kubectl -n $NS rollout status deploy/$d --timeout=300s
                     done
                 '''
             }
         }
 
-        // =============================================================
-        // SCALE
-        // =============================================================
-
         stage('Scale') {
             when {
-                expression {
-                    params.ACTION == 'SCALE'
-                }
+                expression { params.ACTION == 'SCALE' }
             }
-
             steps {
                 sh '''
                     set -eu
@@ -575,17 +426,10 @@ pipeline {
             }
         }
 
-        // =============================================================
-        // DESTROY
-        // =============================================================
-
         stage('Destroy') {
             when {
-                expression {
-                    params.ACTION == 'DESTROY'
-                }
+                expression { params.ACTION == 'DESTROY' }
             }
-
             steps {
                 sh '''
                     kubectl delete namespace $NS --ignore-not-found
@@ -593,23 +437,26 @@ pipeline {
             }
         }
 
-        // =============================================================
-        // REPORT
-        // =============================================================
+        stage('Status') {
+            when {
+                expression { params.ACTION == 'STATUS' }
+            }
+            steps {
+                sh '''
+                    kubectl -n $NS get deploy,pods,svc,hpa -o wide
+                '''
+            }
+        }
 
         stage('Report') {
             when {
-                expression {
-                    params.ACTION != 'DESTROY'
-                }
+                expression { params.ACTION in ['DEPLOY', 'ROLLBACK', 'RESTART', 'SCALE'] }
             }
-
             steps {
                 sh '''
                     kubectl -n $NS get deploy,pods,svc,hpa -o wide
 
-                    kubectl -n $NS rollout history deploy/frontend \
-                        | tail -5 || true
+                    kubectl -n $NS rollout history deploy/frontend | tail -5 || true
 
                     echo "App address: $(kubectl -n $NS get svc frontend \
                         -o jsonpath='{.status.loadBalancer.ingress[0].ip}{.status.loadBalancer.ingress[0].hostname}')"
@@ -618,40 +465,24 @@ pipeline {
         }
     }
 
-    // =============================================================
-    // POST BUILD ACTIONS
-    // =============================================================
-
     post {
-
         success {
-            archiveArtifacts(
-                artifacts: 'audit/**',
-                allowEmptyArchive: true
-            )
+            archiveArtifacts artifacts: 'audit/**', allowEmptyArchive: true
 
             script {
-                notify(
-                    'good',
-                    "SUCCESS ${params.ACTION} ${env.TAG} - ${env.BUILD_URL}"
-                )
+                notify('good',
+                    "SUCCESS ${params.ACTION} ${env.TAG} - ${env.BUILD_URL}")
             }
         }
 
         failure {
-            archiveArtifacts(
-                artifacts: 'audit/**',
-                allowEmptyArchive: true
-            )
+            archiveArtifacts artifacts: 'audit/**', allowEmptyArchive: true
 
             script {
+                if (params.ACTION == 'DEPLOY' &&
+                    env.DEPLOY_STARTED == 'true') {
 
-                if (
-                    params.ACTION == 'DEPLOY' &&
-                    env.DEPLOY_STARTED == 'true'
-                ) {
-
-                    echo 'Deploy or smoke test failed: rolling back to previous revision'
+                    echo 'Deployment failed: attempting rollback'
 
                     sh '''
                         for d in $SERVICES; do
@@ -664,27 +495,20 @@ pipeline {
                         done
                     '''
 
-                    notify(
-                        'danger',
-                        "FAILED ${env.TAG}, automatically rolled back - ${env.BUILD_URL}"
-                    )
+                    notify('danger',
+                        "FAILED ${env.TAG}, rollback attempted - ${env.BUILD_URL}")
 
                 } else {
-
-                    notify(
-                        'danger',
-                        "FAILED ${params.ACTION} ${env.TAG} - ${env.BUILD_URL}"
-                    )
+                    notify('danger',
+                        "FAILED ${params.ACTION} ${env.TAG} - ${env.BUILD_URL}")
                 }
             }
         }
 
         aborted {
             script {
-                notify(
-                    'warning',
-                    "ABORTED ${params.ACTION} ${env.TAG} - ${env.BUILD_URL}"
-                )
+                notify('warning',
+                    "ABORTED ${params.ACTION} ${env.TAG} - ${env.BUILD_URL}")
             }
         }
 
@@ -694,7 +518,7 @@ pipeline {
                     docker rmi $REGISTRY/$s:$TAG >/dev/null 2>&1 || true
                 done
 
-                docker logout "${REGISTRY%%/*}" >/dev/null 2>&1 || true
+                docker logout docker.io >/dev/null 2>&1 || true
             '''
 
             deleteDir()
