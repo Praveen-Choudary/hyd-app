@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lakh Bazaar – Hyderabad's online market</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#14193A;--lapis:#1F2E7A;--bangle:#C2185B;--teal:#0E7C7B;--pearl:#F3F5F9;--card:#fff;--mute:#5C6482;--line:#DDE1EE;--r:14px}
+@media(prefers-color-scheme:dark){:root{--ink:#EEF0FA;--lapis:#2A3C9E;--pearl:#0F1330;--card:#171C42;--mute:#A4ABCB;--line:#2A3163}}
+*{box-sizing:border-box}body{margin:0;background:var(--pearl);color:var(--ink);font:400 16px/1.5 Figtree,system-ui,sans-serif}
+h1,h2,h3{font-family:'Bricolage Grotesque',system-ui,sans-serif;margin:0;line-height:1.1}
+button,input,select{font:inherit;color:inherit}button{cursor:pointer}
+:focus-visible{outline:3px solid var(--bangle);outline-offset:2px}
+header{position:sticky;top:0;z-index:5;background:var(--lapis);color:#fff;display:flex;gap:16px;align-items:center;padding:12px 24px}
+header b{font:800 22px 'Bricolage Grotesque';letter-spacing:-.5px}
+header input{flex:1;max-width:520px;border:0;border-radius:99px;padding:10px 18px;background:#fff;color:#14193A}
+.cartbtn{margin-left:auto;background:var(--bangle);color:#fff;border:0;border-radius:99px;padding:10px 18px;font-weight:600}
+.hero{background:var(--lapis);color:#fff;padding:40px 24px 56px;display:grid;grid-template-columns:1.1fr 1fr;gap:32px;align-items:center}
+.hero h1{font-size:clamp(34px,5vw,60px);font-weight:800;letter-spacing:-1.5px}
+.hero p{max-width:46ch;opacity:.85}
+.hero .pearls{font-size:clamp(70px,12vw,140px);text-align:center;letter-spacing:8px}
+.wrap{max-width:1200px;margin:0 auto;padding:24px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px}
+.chip{white-space:nowrap;border:1px solid var(--line);background:var(--card);border-radius:99px;padding:7px 16px}
+.chip[aria-pressed=true]{background:var(--lapis);color:#fff;border-color:var(--lapis)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-top:20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column}
+.pic{font-size:64px;text-align:center;padding:22px 0;background:linear-gradient(135deg,color-mix(in srgb,var(--lapis) 14%,transparent),color-mix(in srgb,var(--bangle) 14%,transparent))}
+.card .in{padding:12px 14px 14px;display:flex;flex-direction:column;gap:4px;flex:1}
+.card h3{font-size:16px;font-weight:700}.cat{color:var(--mute);font-size:13px}
+.price{font-weight:600;font-size:18px}.price s{color:var(--mute);font-size:13px;font-weight:400;margin-left:6px}
+.rate{color:var(--teal);font-size:13px;font-weight:600}
+.add{margin-top:auto;border:0;border-radius:10px;background:var(--lapis);color:#fff;padding:9px;font-weight:600}
+.add:active{transform:scale(.97)}
+.stores{display:grid;grid-template-columns:320px 1fr;gap:16px;margin-top:48px}
+.stores h2{grid-column:1/-1;font-size:32px}
+.slist{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto}
+.store{text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.store[aria-pressed=true]{border-color:var(--bangle);box-shadow:inset 4px 0 0 var(--bangle)}
+.store small{color:var(--mute);display:block}
+iframe{width:100%;height:420px;border:0;border-radius:var(--r)}
+aside{position:fixed;inset:0 0 0 auto;width:min(420px,100%);background:var(--card);box-shadow:-8px 0 30px #0004;transform:translateX(105%);transition:transform .25s;z-index:10;display:flex;flex-direction:column;padding:20px;gap:12px;overflow:auto}
+aside.open{transform:none}
+.line{display:flex;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding:8px 0}
+.line span:nth-child(2){flex:1}.q button{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:none}
+aside input,aside select{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--pearl)}
+.ok{background:var(--teal);color:#fff;padding:14px;border-radius:12px}
+.err{color:var(--bangle)}
+@media(max-width:760px){.hero,.stores{grid-template-columns:1fr}.hero .pearls{display:none}header b{font-size:18px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<header><b>Lakh Bazaar</b><input id="q" placeholder="Search 100 products, e.g. biryani, saree, cricket" aria-label="Search products"><button class="cartbtn" id="cb">Cart (0)</button></header>
+<section class="hero"><div><h1>Hyderabad shops here.</h1><p>Groceries, gadgets and city favourites like Karachi biscuits and Pochampally ikat. Order online and pick up at a store near you in Banjara Hills, HITEC City, Charminar and more.</p></div><div class="pearls" aria-hidden="true">📿🕌📿</div></section>
+<main class="wrap">
+<div class="chips" id="chips"></div><div class="grid" id="grid" aria-live="polite"></div>
+<section class="stores"><h2>Pickup stores in Hyderabad</h2><div class="slist" id="slist"></div><div><iframe id="map" title="Store location on Google Maps" loading="lazy"></iframe><p><a id="gm" target="_blank" rel="noopener">Open in Google Maps</a></p></div></section>
+</main>
+<aside id="cart" aria-label="Cart"><div style="display:flex;justify-content:space-between"><h2>Your cart</h2><button id="x" aria-label="Close cart" style="border:0;background:none;font-size:24px">✕</button></div>
+<div id="lines"></div><div id="co"><input id="nm" placeholder="Full name"><br><br><input id="ph" placeholder="Phone number" inputmode="tel"><br><br><select id="st" aria-label="Pickup store"></select><br><br>
+<button class="add" style="width:100%;padding:12px" id="place">Place order</button></div><div id="msg"></div></aside>
+<script>
+const $=s=>document.querySelector(s),inr=n=>'₹'+n.toLocaleString('en-IN');
+let P=[],S=[],cat='',cart={},store=null;
+try{cart=JSON.parse(localStorage.getItem('cart')||'{}')}catch(e){}
+const mapTo=s=>{store=s;$('#map').src=`https://maps.google.com/maps?q=${s.lat},${s.lng}&z=15&output=embed`;$('#gm').href=`https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`;$('#st').value=s.id;drawStores()};
+function drawStores(){$('#slist').innerHTML=S.map(s=>`<button class="store" aria-pressed="${store?.id===s.id}" data-id="${s.id}"><b>${s.name}</b><small>${s.address}</small></button>`).join('')}
+function draw(){const q=$('#q').value.toLowerCase();const L=P.filter(p=>(!cat||p.category===cat)&&p.name.toLowerCase().includes(q));
+$('#grid').innerHTML=L.length?L.map(p=>`<article class="card"><div class="pic">${p.icon}</div><div class="in"><span class="cat">${p.category}</span><h3>${p.name}</h3><span class="rate">★ ${p.rating}</span><span class="price">${inr(p.price)}<s>${inr(p.mrp)}</s></span><button class="add" data-id="${p.id}">Add to cart</button></div></article>`).join(''):'<p>No products match. Try a different search or category.</p>'}
+function drawCart(){const L=Object.entries(cart).map(([id,q])=>({...P.find(p=>p.id==id),qty:q}));const n=L.reduce((a,l)=>a+l.qty,0),t=L.reduce((a,l)=>a+l.qty*l.price,0);
+$('#cb').textContent=`Cart (${n})`;try{localStorage.setItem('cart',JSON.stringify(cart))}catch(e){}
+$('#lines').innerHTML=(L.map(l=>`<div class="line"><span>${l.icon}</span><span>${l.name}<br><small>${inr(l.price)}</small></span><span class="q"><button data-d="-1" data-id="${l.id}">−</button> ${l.qty} <button data-d="1" data-id="${l.id}">+</button></span></div>`).join('')||'<p>Your cart is empty. Add something from the catalog.</p>')+(n?`<h3 style="margin:12px 0">Total ${inr(t)}</h3>`:'');$('#co').hidden=!n}
+async function init(){
+ const [c,p,s]=await Promise.all(['catalog/categories','catalog/products','orders/stores'].map(u=>fetch('/api/'+u).then(r=>r.json())));
+ P=p;S=s;cart=Object.fromEntries(Object.entries(cart).filter(([id])=>P.some(x=>x.id==id)));
+ $('#chips').innerHTML=['All',...c].map(x=>`<button class="chip" aria-pressed="${x==='All'}">${x}</button>`).join('');
+ $('#st').innerHTML=S.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');mapTo(S[0]);draw();drawCart()}
+$('#chips').onclick=e=>{if(!e.target.matches('.chip'))return;cat=e.target.textContent==='All'?'':e.target.textContent;document.querySelectorAll('.chip').forEach(b=>b.setAttribute('aria-pressed',b===e.target));draw()};
+$('#q').oninput=draw;
+$('#grid').onclick=e=>{const id=e.target.dataset.id;if(id){cart[id]=(cart[id]||0)+1;drawCart();$('#cb').animate([{transform:'scale(1.12)'},{transform:'none'}],200)}};
+$('#lines').onclick=e=>{const id=e.target.dataset.id;if(!id)return;cart[id]+=+e.target.dataset.d;if(cart[id]<1)delete cart[id];drawCart()};
+$('#slist').onclick=e=>{const b=e.target.closest('.store');if(b)mapTo(S.find(s=>s.id==b.dataset.id))};
+$('#st').onchange=e=>mapTo(S.find(s=>s.id==e.target.value));
+$('#cb').onclick=()=>$('#cart').classList.add('open');$('#x').onclick=()=>$('#cart').classList.remove('open');
+$('#place').onclick=async()=>{const items=Object.entries(cart).map(([id,qty])=>({id:+id,qty,price:P.find(p=>p.id==id).price}));
+ const r=await fetch('/api/orders/orders',{method:'POST',body:JSON.stringify({name:$('#nm').value,phone:$('#ph').value,storeId:+$('#st').value,items})});const o=await r.json();
+ if(r.ok){cart={};drawCart();$('#msg').innerHTML=`<div class="ok">Order ${o.id} confirmed. Pick up at ${S.find(s=>s.id==o.storeId).name}. Total ${inr(o.total)}.</div>`}else $('#msg').innerHTML=`<span class="err">${o.error}</span>`};
+init().catch(()=>$('#grid').innerHTML='<p class="err">Could not load products. Check that the catalog service is running.</p>');
+</script></body></html>

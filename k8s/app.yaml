@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: catalog, namespace: hyd-shop}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: catalog}}
+  template:
+    metadata: {labels: {app: catalog}}
+    spec:
+      containers:
+      - name: catalog
+        image: node:20-alpine
+        command: ["node", "/app/server.js"]
+        ports: [{containerPort: 3000}]
+        readinessProbe: {httpGet: {path: /health, port: 3000}}
+        livenessProbe: {httpGet: {path: /health, port: 3000}, initialDelaySeconds: 10}
+        resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 300m, memory: 128Mi}}
+        volumeMounts: [{name: code, mountPath: /app}]
+      volumes: [{name: code, configMap: {name: catalog-code}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: catalog, namespace: hyd-shop}
+spec: {selector: {app: catalog}, ports: [{port: 3000}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: orders, namespace: hyd-shop}
+spec:
+  replicas: 1   # orders are held in memory; use 1 replica until a database is added
+  selector: {matchLabels: {app: orders}}
+  template:
+    metadata: {labels: {app: orders}}
+    spec:
+      containers:
+      - name: orders
+        image: node:20-alpine
+        command: ["node", "/app/server.js"]
+        ports: [{containerPort: 3000}]
+        readinessProbe: {httpGet: {path: /health, port: 3000}}
+        resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 300m, memory: 128Mi}}
+        volumeMounts: [{name: code, mountPath: /app}]
+      volumes: [{name: code, configMap: {name: orders-code}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: orders, namespace: hyd-shop}
+spec: {selector: {app: orders}, ports: [{port: 3000}]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: frontend, namespace: hyd-shop}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: frontend}}
+  template:
+    metadata: {labels: {app: frontend}}
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        ports: [{containerPort: 80}]
+        readinessProbe: {httpGet: {path: /, port: 80}}
+        resources: {requests: {cpu: 25m, memory: 32Mi}, limits: {cpu: 200m, memory: 64Mi}}
+        volumeMounts:
+        - {name: web, mountPath: /usr/share/nginx/html/index.html, subPath: index.html}
+        - {name: web, mountPath: /etc/nginx/conf.d/default.conf, subPath: default.conf}
+      volumes: [{name: web, configMap: {name: frontend-files}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: frontend, namespace: hyd-shop}
+spec: {type: NodePort, selector: {app: frontend}, ports: [{port: 80, nodePort: 30080}]}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: catalog, namespace: hyd-shop}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: catalog}
+  minReplicas: 2
+  maxReplicas: 6
+  metrics: [{type: Resource, resource: {name: cpu, target: {type: Utilization, averageUtilization: 70}}}]

@@ -1,0 +1,15 @@
+services:
+  catalog:
+    build: ./catalog
+    image: hyd-shop/catalog:latest
+    restart: unless-stopped
+  orders:
+    build: ./orders
+    image: hyd-shop/orders:latest
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    image: hyd-shop/frontend:latest
+    ports: ["8080:80"]
+    depends_on: [catalog, orders]
+    restart: unless-stopped
