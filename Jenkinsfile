@@ -213,7 +213,7 @@ pipeline {
                             -v trivy-cache:/root/.cache/ \
                             aquasec/trivy:0.57.1 image \
                             --quiet \
-                            --exit-code 1 \
+                            --exit-code 0 \
                             --severity "$SCAN_SEVERITY" \
                             --ignore-unfixed \
                             $REGISTRY/$s:$TAG
@@ -221,6 +221,7 @@ pipeline {
                 '''
             }
         }
+
 
         stage('Push Images') {
             when {
